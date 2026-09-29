@@ -110,6 +110,30 @@ export default function TrainingPanel({
   // settings form
   const [form, setForm] = useState<OrgSettings>(DEFAULT_SETTINGS);
 
+  // safety self-test
+  const [selftest, setSelftest] = useState<{
+    passed: number;
+    failed: number;
+    manual: number;
+    results: { id: string; question: string; status: "pass" | "fail" | "manual"; detail: string }[];
+  } | null>(null);
+
+  const runSelftest = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/train", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "selftest" }),
+      });
+      const j = await r.json();
+      if (r.ok) setSelftest(j.selftest);
+      else setMsg({ kind: "err", text: j.error ?? "Self-test failed to run." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const load = useCallback(async () => {
     const r = await fetch("/api/train", { cache: "no-store" });
     if (r.status === 401) {
@@ -539,6 +563,43 @@ export default function TrainingPanel({
                       <Check ok={data.status.testedSinceChange} text="Tested since the last change" />
                       <Check ok={data.storePersistent} text="Persistent storage connected" />
                     </ul>
+
+                    <div className="space-y-2 rounded-xl border border-white/10 p-3">
+                      <button
+                        disabled={busy}
+                        onClick={runSelftest}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[rgba(var(--accent-rgb),0.35)] py-2 text-xs font-semibold hover:bg-white/5 disabled:opacity-40"
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5 accent" /> Run safety test (20 questions)
+                      </button>
+                      {selftest && (
+                        <>
+                          <p className="text-center text-xs">
+                            <span className="text-emerald-300">{selftest.passed} passed</span> ·{" "}
+                            <span className={selftest.failed ? "text-rose-300" : "text-white/50"}>{selftest.failed} failed</span> ·{" "}
+                            <span className="text-white/50">{selftest.manual} to try in chat</span>
+                          </p>
+                          <ul className="thin-scroll max-h-56 space-y-1 overflow-y-auto text-[11px]">
+                            {selftest.results.map((r) => (
+                              <li key={r.id} className="flex gap-2">
+                                <span
+                                  className={
+                                    r.status === "pass" ? "text-emerald-300" : r.status === "fail" ? "text-rose-300" : "text-amber-200"
+                                  }
+                                >
+                                  {r.status === "pass" ? "✓" : r.status === "fail" ? "✗" : "•"}
+                                </span>
+                                <span className="text-white/70">
+                                  <span className="text-white/90">{r.question}</span>
+                                  <br />
+                                  <span className="text-white/45">{r.detail}</span>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
 
                     {/* The master GO LIVE button */}
                     <motion.button

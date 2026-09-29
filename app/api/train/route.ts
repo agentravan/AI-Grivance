@@ -18,6 +18,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { authConfigured, clientKey, getAdmin } from "@/lib/auth";
 import { store } from "@/lib/store";
 import { lastPulse, runPulse } from "@/lib/pulse";
+import { runSelfTest } from "@/lib/selftest";
 import { webSearchEnabled } from "@/lib/search";
 import {
   addDraftDoc,
@@ -166,6 +167,10 @@ export async function POST(req: NextRequest) {
     if (body.action === "pulse") {
       const run = await runPulse(admin.name);
       return run.ok ? json({ ok: true, pulse: run }) : json({ error: run.detail, pulse: run }, 502);
+    }
+
+    if (body.action === "selftest") {
+      return json({ ok: true, selftest: runSelfTest() });
     }
 
     if (body.action === "approve" && body.id) {
