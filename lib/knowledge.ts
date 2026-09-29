@@ -206,9 +206,13 @@ export async function addDraftDoc(input: {
   return meta;
 }
 
-export async function deleteDraftDoc(id: string, by: string) {
+async function findDraftDoc(id: string): Promise<DocMeta | undefined> {
   const idx = await store.hgetallJSON<DocMeta>(K.index);
-  const meta = idx[id];
+  return idx[id] ?? Object.values(idx).find((m) => m.id === id);
+}
+
+export async function deleteDraftDoc(id: string, by: string) {
+  const meta = await findDraftDoc(id);
   if (!meta) return false;
   await store.hdel(K.index, id);
   await store.del(K.doc(id));
@@ -219,8 +223,7 @@ export async function deleteDraftDoc(id: string, by: string) {
 
 /** Named sign-off for a web-sourced Pulse pack. The reviewer shows up in answers' source label. */
 export async function approveDraftDoc(id: string, by: string) {
-  const idx = await store.hgetallJSON<DocMeta>(K.index);
-  const meta = idx[id];
+  const meta = await findDraftDoc(id);
   if (!meta) return null;
   const at = now();
   const next: DocMeta = {

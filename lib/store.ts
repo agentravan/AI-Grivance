@@ -62,9 +62,17 @@ class UpstashStore implements Store {
     await this.r.hset(key, { [field]: JSON.stringify(value) });
   }
   async hgetallJSON<T>(key: string) {
-    const raw = (await this.r.hgetall<Record<string, string>>(key)) ?? {};
+    // With automaticDeserialization:false Upstash may return the raw Redis reply
+    // as a flat [field, value, field, value, …] array instead of an object.
+    const raw = (await this.r.hgetall(key)) as unknown;
+    const pairs: [string, unknown][] = [];
+    if (Array.isArray(raw)) {
+      for (let i = 0; i + 1 < raw.length; i += 2) pairs.push([String(raw[i]), raw[i + 1]]);
+    } else if (raw && typeof raw === "object") {
+      pairs.push(...Object.entries(raw as Record<string, unknown>));
+    }
     const out: Record<string, T> = {};
-    for (const [k, v] of Object.entries(raw)) {
+    for (const [k, v] of pairs) {
       const p = parse<T>(v);
       if (p !== null) out[k] = p;
     }
