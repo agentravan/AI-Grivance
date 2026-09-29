@@ -17,7 +17,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { streamText } from "ai";
-import { createGroq } from "@ai-sdk/groq";
+import { getModel, llmInfo } from "@/lib/llm";
 import { clientKey, getAdmin } from "@/lib/auth";
 import { store } from "@/lib/store";
 import {
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     version: live?.version ?? 0,
     publishedAt: live?.publishedAt ?? null,
     settings,
-    llmConfigured: Boolean(process.env.GROQ_API_KEY),
+    llmConfigured: llmInfo().provider !== "none",
     storePersistent: store.kind === "upstash",
     pilot: process.env.PILOT_MODE !== "off",
     grievanceLlm: grievanceLlm(),
@@ -139,13 +139,12 @@ export async function POST(req: NextRequest) {
   const sources = [...new Set(excerpts.map((e) => e.title))];
 
   // 6) Retrieval-only mode (no key, or grievance LLM disabled by policy).
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey || (module === "hr" && grievanceLlm() === "off")) {
+  const model = getModel();
+  if (!model || (module === "hr" && grievanceLlm() === "off")) {
     return textResponse(fallbackAnswer(module, settings, excerpts), "fallback", sources);
   }
 
   // 7) LLM call — PII-redacted history, strict system prompt, streamed back.
-  const groq = createGroq({ apiKey });
   const modelMessages = messages.map((m) =>
     m.role === "user"
       ? { role: "user" as const, content: redactPII(m.content) }
@@ -154,7 +153,7 @@ export async function POST(req: NextRequest) {
 
   let failed = false;
   const result = streamText({
-    model: groq(process.env.GROQ_MODEL || "llama-3.3-70b-versatile"),
+    model,
     system: buildSystemPrompt(module, settings, excerpts),
     messages: modelMessages,
     temperature: module === "hr" ? 0.2 : 0.5,

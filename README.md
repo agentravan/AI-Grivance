@@ -27,7 +27,7 @@ These come from a design review of the brief. They are intentional.
 | Piece | Service | Free tier |
 |---|---|---|
 | Hosting | Vercel **Hobby** | Free, but **personal and non-commercial use only** |
-| LLM | Groq (`llama-3.3-70b-versatile`) | Free, rate-limited (around 12K tokens/min). Degrades to quoting policy text when the limit is hit |
+| LLM | **OpenRouter** (`openrouter/free`, auto-picks a free model) or Groq | Free, rate-limited. Degrades to quoting policy text when the limit is hit |
 | Knowledge store | Upstash Redis (Vercel Marketplace) | Free: 256 MB, about 500K commands/month |
 | Voice | Browser Web Speech API | Free |
 
@@ -43,7 +43,8 @@ npm install
 
 # 2. Create your env file
 cp .env.example .env.local
-#   - GROQ_API_KEY   → https://console.groq.com/keys (free)
+#   - OPENROUTER_API_KEY → https://openrouter.ai/settings/keys (free models via openrouter/free)
+#     (or GROQ_API_KEY → https://console.groq.com/keys)
 #   - ADMIN_PASSCODE → any strong passcode for the HR/L&D content team
 #   - AUTH_SECRET    → node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 #   (Upstash vars are optional locally — in-memory storage is used without them)
@@ -58,7 +59,7 @@ npm run dev
 1. Push this folder to a GitHub repo.
 2. In Vercel, go to **Add New → Project**, import the repo and keep the defaults.
 3. Open the project's **Storage** tab, then **Marketplace → Upstash for Redis → Create → Connect to project**. This adds `KV_REST_API_URL` and `KV_REST_API_TOKEN` automatically.
-4. Under **Settings → Environment Variables**, add `GROQ_API_KEY`, `ADMIN_PASSCODE`, `AUTH_SECRET`, `GRIEVANCE_LLM` and `PILOT_MODE`.
+4. Under **Settings → Environment Variables**, add `OPENROUTER_API_KEY` (or `GROQ_API_KEY`), `ADMIN_PASSCODE`, `AUTH_SECRET`, `GRIEVANCE_LLM` and `PILOT_MODE`.
 5. Under **Settings → Deployment Protection**, turn on protection for **Preview** deployments. Previews share your secrets and data.
 6. Redeploy so the new variables take effect.
 
@@ -102,7 +103,8 @@ lib/
 
 - **Guardrail keywords** are in `lib/guardrails.ts`. They are deliberately over-inclusive. Review them with your IC and Legal team.
 - **Tone and persona** are in the `SHARED`, `HR_PROMPT` and `LD_PROMPT` constants in `lib/guardrails.ts`.
-- **Switching models:** change `GROQ_MODEL`. To move to another provider, replace `createGroq` in `app/api/chat/route.ts` with any Vercel AI SDK provider, such as `@ai-sdk/openai` or `@ai-sdk/azure`.
+- **Switching models:** set `OPENROUTER_MODEL` (e.g. a paid model with zero data retention for production) or `GROQ_MODEL`. Provider selection lives in `lib/llm.ts`.
+- **Privacy with OpenRouter free models:** free endpoints may log or train on prompts. For grievances, set `GRIEVANCE_LLM=off` or use a paid model and turn on zero data retention in OpenRouter → Settings → Privacy. To move to another provider, replace `createGroq` in `app/api/chat/route.ts` with any Vercel AI SDK provider, such as `@ai-sdk/openai` or `@ai-sdk/azure`.
 - **Colours:** each module's accent is set in `app/globals.css` under `[data-module="ld"]` and `[data-module="hr"]`.
 - **SSO:** replace `lib/auth.ts` with Auth.js and your Google Workspace or Entra ID tenant before a wider rollout.
 
