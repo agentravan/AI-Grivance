@@ -1,0 +1,35 @@
+{
+  "name": "aegis-hr-ld-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cinematic voice AI assistant for L&D and HR grievance navigation. Runs on Vercel Hobby + Groq free tier + Upstash free tier.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@ai-sdk/groq": "^2.0.0",
+    "@upstash/redis": "^1.35.0",
+    "ai": "^5.0.0",
+    "framer-motion": "^12.0.0",
+    "jose": "^6.0.0",
+    "lucide-react": ">=0.460.0",
+    "next": "^16.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "unpdf": "^1.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}
