@@ -184,6 +184,7 @@ export async function addDraftDoc(input: {
   text: string;
   source: DocMeta["source"];
   by: string;
+  needsReview?: boolean;
 }): Promise<DocMeta> {
   const text = cleanText(input.text);
   const chunks = chunkText(text);
@@ -196,6 +197,7 @@ export async function addDraftDoc(input: {
     source: input.source,
     uploadedAt: now(),
     uploadedBy: input.by,
+    ...(input.needsReview ? { needsReview: true } : {}),
   };
   await store.setJSON(K.doc(meta.id), chunks);
   await store.hsetJSON(K.index, meta.id, meta);
@@ -213,6 +215,25 @@ export async function deleteDraftDoc(id: string, by: string) {
   await store.setJSON(K.changedAt, now());
   await audit(by, "delete", meta.title);
   return true;
+}
+
+/** Named sign-off for a web-sourced Pulse pack. The reviewer shows up in answers' source label. */
+export async function approveDraftDoc(id: string, by: string) {
+  const idx = await store.hgetallJSON<DocMeta>(K.index);
+  const meta = idx[id];
+  if (!meta) return null;
+  const at = now();
+  const next: DocMeta = {
+    ...meta,
+    needsReview: false,
+    reviewedBy: by,
+    reviewedAt: at,
+    title: `${meta.title.replace(/ \(reviewed by .*\)$/, "")} (reviewed by ${by}, ${at.slice(0, 10)})`,
+  };
+  await store.hsetJSON(K.index, id, next);
+  await store.setJSON(K.changedAt, at);
+  await audit(by, "approve", next.title);
+  return next;
 }
 
 export async function getDraftSettings(): Promise<OrgSettings> {

@@ -26,6 +26,7 @@ import {
   ExternalLink,
   EyeOff,
   FlaskConical,
+  Globe,
   GraduationCap,
   HeartHandshake,
   Languages,
@@ -45,7 +46,7 @@ import {
 import HoloCore from "@/components/HoloCore";
 import TrainingPanel from "@/components/TrainingPanel";
 import { useVoiceAgent, type VoiceLang } from "@/hooks/useVoiceAgent";
-import type { ChatRoute, ModuleId, PublicStatus } from "@/lib/types";
+import type { ChatRoute, ModuleId, PublicStatus, WebSource } from "@/lib/types";
 
 // ───────────────────────────── types & helpers ─────────────────────────────
 
@@ -55,6 +56,7 @@ interface Msg {
   content: string;
   route?: ChatRoute;
   sources?: string[];
+  web?: WebSource[];
 }
 
 interface PathItem {
@@ -235,7 +237,13 @@ export default function Dashboard() {
           } catch {
             /* ignore */
           }
-          patch({ route, sources });
+          let web: WebSource[] = [];
+          try {
+            web = JSON.parse(decodeURIComponent(res.headers.get("x-aegis-web") ?? "%5B%5D"));
+          } catch {
+            /* ignore */
+          }
+          patch({ route, sources, web });
 
           const reader = res.body?.getReader();
           const decoder = new TextDecoder();
@@ -590,6 +598,12 @@ export default function Dashboard() {
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
               <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-white/50">
                 {isHR ? "Policy & grievance guidance" : "Learning session"}
+                {!isHR && status && (
+                  <span className={`ml-2 normal-case tracking-normal ${status.webSearch ? "text-sky-200/80" : "text-white/30"}`}>
+                    · live web {status.webSearch ? "on" : "off"}
+                  </span>
+                )}
+                {isHR && <span className="ml-2 normal-case tracking-normal text-white/30">· offline from the web by design</span>}
               </p>
               {messages.length > 0 && (
                 <button onClick={clearThread} className="flex items-center gap-1 text-[11px] text-white/45 hover:text-white">
@@ -814,11 +828,32 @@ function Bubble({ msg, typing, name }: { msg: Msg; typing: boolean; name: string
       ) : (
         <p className="whitespace-pre-wrap">{linkify(msg.content)}</p>
       )}
+      {!mine && !!msg.web?.length && (
+        <div className="mt-2 space-y-1 border-t border-white/5 pt-2">
+          <p className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-sky-200/70">
+            <Globe className="h-3 w-3" /> Live web · may change · not company policy
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {msg.web.map((w) => (
+              <a
+                key={w.url}
+                href={w.url}
+                target="_blank"
+                rel="noreferrer"
+                title={w.title}
+                className="rounded-md border border-sky-300/20 bg-sky-400/5 px-1.5 py-0.5 font-mono text-[10px] text-sky-200/80 hover:bg-sky-400/15"
+              >
+                {w.domain} · checked {new Date(w.checkedAt).toLocaleDateString()}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
       {!mine && !!msg.sources?.length && (
         <div className="mt-2 flex flex-wrap gap-1">
           {msg.sources.map((s) => (
             <span key={s} className="rounded-md bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/50">
-              {s}
+              Policy · {s}
             </span>
           ))}
         </div>

@@ -19,6 +19,8 @@ export interface Store {
   readonly kind: "upstash" | "memory";
   getJSON<T>(key: string): Promise<T | null>;
   setJSON(key: string, value: unknown): Promise<void>;
+  /** Set with expiry (seconds). */
+  setJSONEx(key: string, value: unknown, ttlSeconds: number): Promise<void>;
   del(key: string): Promise<void>;
   hsetJSON(key: string, field: string, value: unknown): Promise<void>;
   hgetallJSON<T>(key: string): Promise<Record<string, T>>;
@@ -49,6 +51,9 @@ class UpstashStore implements Store {
   }
   async setJSON(key: string, value: unknown) {
     await this.r.set(key, JSON.stringify(value));
+  }
+  async setJSONEx(key: string, value: unknown, ttlSeconds: number) {
+    await this.r.set(key, JSON.stringify(value), { ex: ttlSeconds });
   }
   async del(key: string) {
     await this.r.del(key);
@@ -97,6 +102,10 @@ class MemoryStore implements Store {
   }
   async setJSON(key: string, value: unknown) {
     this.kv.set(key, JSON.stringify(value));
+  }
+  async setJSONEx(key: string, value: unknown, ttlSeconds: number) {
+    this.kv.set(key, JSON.stringify(value));
+    (setTimeout(() => this.kv.delete(key), ttlSeconds * 1000) as unknown as { unref?: () => void }).unref?.();
   }
   async del(key: string) {
     this.kv.delete(key);

@@ -18,6 +18,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { streamText } from "ai";
 import { getModel, llmInfo } from "@/lib/llm";
+import { excerptsCoverPrice, planLdSearch, webSearch, webSearchEnabled, type WebResult } from "@/lib/search";
 import { clientKey, getAdmin } from "@/lib/auth";
 import { store } from "@/lib/store";
 import {
@@ -59,6 +60,7 @@ export async function GET(req: NextRequest) {
     storePersistent: store.kind === "upstash",
     pilot: process.env.PILOT_MODE !== "off",
     grievanceLlm: grievanceLlm(),
+    webSearch: webSearchEnabled(),
     stage: draft ? "draft" : "live",
   };
   return NextResponse.json(status, { headers: { "Cache-Control": "no-store" } });
@@ -68,7 +70,14 @@ export async function GET(req: NextRequest) {
 
 type InMsg = { role: "user" | "assistant"; content: string };
 
-function textResponse(body: ReadableStream<Uint8Array> | string, route: ChatRoute, sources: string[] = [], status = 200) {
+function textResponse(
+  body: ReadableStream<Uint8Array> | string,
+  route: ChatRoute,
+  sources: string[] = [],
+  status = 200,
+  web: WebResult[] = [],
+) {
+  const webMeta = web.map(({ title, url, domain, checkedAt }) => ({ title, url, domain, checkedAt }));
   return new Response(body, {
     status,
     headers: {
@@ -76,6 +85,7 @@ function textResponse(body: ReadableStream<Uint8Array> | string, route: ChatRout
       "Cache-Control": "no-store",
       "x-aegis-route": route,
       "x-aegis-sources": encodeURIComponent(JSON.stringify(sources)),
+      "x-aegis-web": encodeURIComponent(JSON.stringify(webMeta)),
     },
   });
 }
@@ -138,10 +148,21 @@ export async function POST(req: NextRequest) {
   const excerpts = retrieve(snap, redactPII(recentUserText), module, 4);
   const sources = [...new Set(excerpts.map((e) => e.title))];
 
+  // 5b) Live web context — L&D ONLY, templated query, never the employee's words.
+  //     The grievance module has no path to web search.
+  let web: WebResult[] = [];
+  if (module === "ld") {
+    const plan = planLdSearch(
+      lastUser.content,
+      excerptsCoverPrice(excerpts.map((e) => e.text), lastUser.content),
+    );
+    if (plan) web = await webSearch(plan);
+  }
+
   // 6) Retrieval-only mode (no key, or grievance LLM disabled by policy).
   const model = getModel();
   if (!model || (module === "hr" && grievanceLlm() === "off")) {
-    return textResponse(fallbackAnswer(module, settings, excerpts), "fallback", sources);
+    return textResponse(fallbackAnswer(module, settings, excerpts, web), "fallback", sources, 200, web);
   }
 
   // 7) LLM call — PII-redacted history, strict system prompt, streamed back.
@@ -154,7 +175,7 @@ export async function POST(req: NextRequest) {
   let failed = false;
   const result = streamText({
     model,
-    system: buildSystemPrompt(module, settings, excerpts),
+    system: buildSystemPrompt(module, settings, excerpts, web),
     messages: modelMessages,
     temperature: module === "hr" ? 0.2 : 0.5,
     maxOutputTokens: 400,
@@ -182,7 +203,7 @@ export async function POST(req: NextRequest) {
         failed = true;
       }
       if (emitted === 0) {
-        controller.enqueue(encoder.encode(fallbackAnswer(module, settings, excerpts)));
+        controller.enqueue(encoder.encode(fallbackAnswer(module, settings, excerpts, web)));
       } else if (failed) {
         controller.enqueue(encoder.encode("\n\n(Connection interrupted — please ask again if the answer looks incomplete.)"));
       }
@@ -190,5 +211,5 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return textResponse(stream, "llm", sources);
+  return textResponse(stream, "llm", sources, 200, web);
 }

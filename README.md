@@ -30,6 +30,7 @@ These come from a design review of the brief. They are intentional.
 | LLM | **OpenRouter** (`openrouter/free`, auto-picks a free model) or Groq | Free, rate-limited. Degrades to quoting policy text when the limit is hit |
 | Knowledge store | Upstash Redis (Vercel Marketplace) | Free: 256 MB, about 500K commands/month |
 | Voice | Browser Web Speech API | Free |
+| Web search | Tavily | Free tier, 1 credit per search. Capped by `WEB_MONTHLY_CAP` |
 
 > ⚠️ **An internal tool for an employer counts as commercial use.** Vercel's Hobby terms don't allow it. Use Hobby for the pilot and demo. For production, move to **Vercel Pro (US$20/month, about ₹1,700)** or your company's own hosting. Also move to a paid LLM plan that has a data-processing agreement. The code runs unchanged in both places.
 
@@ -77,7 +78,36 @@ npm run dev
 
 ---
 
-## 6. Project structure
+## 6. Live web search & the Regulatory Pulse
+
+Search is added only where it's safe, and it's clearly labelled everywhere.
+
+| Where | What happens | What reaches the search engine |
+|---|---|---|
+| **L&D chat** | For questions about exam fees, prices, validity or "is X still offered", when the question names a known certification or course (AWS, PMP, CCNA, SHRM… or anything listed in `WEB_ENTITIES`), and only if your uploaded catalog doesn't already give the amount | A **templated** query such as `PMP certification exam fee India 2026 official`. It never contains the employee's own words |
+| **HR Grievance** | **Never searches the web.** No code path leads there | Nothing |
+| **Regulatory & Skills Pulse** (Training Panel → *Run Pulse now*, plus automatically every day at 08:00 IST) | Fixed topics (Labour Codes, DPDP Rules, POSH, the state set in `PULSE_STATE`, in-demand skills, certification fees) arrive as **draft** updates marked *needs review*. GO LIVE is blocked until a named admin approves them. Answers then say "reviewed by …" | Only the fixed topic text |
+
+**How answers are labelled:** each answer carries chips. Company material shows "Policy · <document>". Web material shows "<site> · checked <date>" and "not company policy". The model is told that company policy always wins over the web, and it treats web text as untrusted: HTML is stripped, instruction-like lines are removed, and each result is capped at 800 characters.
+
+**What it costs:** results are cached for 7 days, and a monthly counter (`WEB_MONTHLY_CAP`, default 900) stops searching once the cap is reached. The daily Pulse uses about 6 credits.
+
+## 7. Testing before a demo or GO LIVE
+
+```bash
+node scripts/eval.mjs https://your-app.vercel.app                        # live version
+ADMIN_PASSCODE=xxxx node scripts/eval.mjs https://your-app.vercel.app    # the draft, via Test Mode
+```
+
+The script runs 20 test questions from `scripts/golden.json`, in English, Hindi and Hinglish. It checks that:
+- crisis, POSH and safety messages never reach the AI;
+- the grievance module never uses the web;
+- email addresses and phone numbers are never echoed back;
+- prompt-injection attempts fail.
+
+Add your client's own questions to the file.
+
+## 8. Project structure
 
 ```
 app/
@@ -86,6 +116,7 @@ app/
   api/chat/route.ts      Chat & grievance engine: guardrails, retrieval, Groq streaming, fallback
   api/train/route.ts     Training & knowledge handler: upload, settings, GO LIVE, kill switch
   api/auth/route.ts      Admin sign-in (passcode → signed httpOnly cookie)
+  api/cron/pulse/route.ts Daily Regulatory & Skills Pulse (Vercel Cron, CRON_SECRET)
 hooks/
   useVoiceAgent.ts       Speech recognition + synthesis "phone call" loop + visualizer levels
 components/
@@ -95,11 +126,16 @@ lib/
   guardrails.ts          Crisis/POSH/safety screens, PII redaction, system prompts, fallback
   knowledge.ts           Chunking, BM25 keyword retrieval, draft → live publishing, audit log
   store.ts               Upstash Redis (prod) / in-memory (dev) key-value layer
+  llm.ts                 OpenRouter / Groq provider selection from env
+  search.ts              Tavily web search: L&D trigger rules, templated queries, cache, cap, sanitising
+  pulse.ts               Regulatory & Skills Pulse → draft packs that need approval
+scripts/
+  golden.json, eval.mjs  20-question safety & quality test run
   auth.ts                jose sessions, timing-safe passcode check, hashed rate-limit keys
   types.ts               Shared types
 ```
 
-## 7. Customising
+## 9. Customising
 
 - **Guardrail keywords** are in `lib/guardrails.ts`. They are deliberately over-inclusive. Review them with your IC and Legal team.
 - **Tone and persona** are in the `SHARED`, `HR_PROMPT` and `LD_PROMPT` constants in `lib/guardrails.ts`.
@@ -108,7 +144,7 @@ lib/
 - **Colours:** each module's accent is set in `app/globals.css` under `[data-module="ld"]` and `[data-module="hr"]`.
 - **SSO:** replace `lib/auth.ts` with Auth.js and your Google Workspace or Entra ID tenant before a wider rollout.
 
-## 8. Browser support
+## 10. Browser support
 
 | | Voice in | Voice out | Notes |
 |---|---|---|---|

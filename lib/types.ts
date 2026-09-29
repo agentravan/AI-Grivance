@@ -11,7 +11,11 @@ export interface DocMeta {
   scope: DocScope;
   chars: number;
   chunks: number;
-  source: "pdf" | "text";
+  source: "pdf" | "text" | "web";
+  /** Web-sourced Pulse packs must be approved by a named admin before GO LIVE. */
+  needsReview?: boolean;
+  reviewedBy?: string;
+  reviewedAt?: string;
   uploadedAt: string;
   uploadedBy: string;
 }
@@ -51,10 +55,20 @@ export interface PublicStatus {
   storePersistent: boolean;
   pilot: boolean;
   grievanceLlm: "redacted" | "off";
+  /** Live web search available for L&D (key present + enabled). */
+  webSearch: boolean;
   stage: Stage;
 }
 
 /** How the chat engine answered — sent in the `x-aegis-route` header. */
+/** A web source attached to an answer (x-aegis-web header). */
+export interface WebSource {
+  title: string;
+  url: string;
+  domain: string;
+  checkedAt: string;
+}
+
 export type ChatRoute = "llm" | "fallback" | "posh" | "crisis" | "safety" | "offline" | "ratelimited";
 
 export interface AuditEntry {

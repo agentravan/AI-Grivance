@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle2,
+  Globe,
+  RefreshCw,
   FileText,
   FlaskConical,
   LogOut,
@@ -40,6 +42,8 @@ interface TrainState {
   };
   audit: AuditEntry[];
   storePersistent: boolean;
+  webSearch: boolean;
+  pulse: { at: string; ok: boolean; detail: string; docs: string[] } | null;
 }
 
 interface Props {
@@ -317,6 +321,44 @@ export default function TrainingPanel({
 
                 {tab === "knowledge" && (
                   <section className="space-y-4">
+                    <div className="space-y-2 rounded-xl border border-white/10 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="flex items-center gap-2 text-sm font-semibold">
+                          <Globe className="h-4 w-4 accent" /> Regulatory & Skills Pulse
+                        </p>
+                        <span className={`font-mono text-[10px] ${data?.webSearch ? "text-emerald-300" : "text-white/40"}`}>
+                          LIVE WEB: {data?.webSearch ? "ON" : "OFF"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-white/55">
+                        Searches fixed topics (Labour Codes, DPDP, POSH, certification fees, in-demand skills) — never employee
+                        messages. Results arrive here as drafts that you must approve before GO LIVE. Runs daily automatically.
+                      </p>
+                      {data?.pulse && (
+                        <p className={`text-[11px] ${data.pulse.ok ? "text-emerald-200/80" : "text-amber-200/90"}`}>
+                          Last run {fmt(data.pulse.at)} — {data.pulse.detail}
+                        </p>
+                      )}
+                      <button
+                        disabled={busy || !data?.webSearch}
+                        onClick={() =>
+                          call(
+                            () =>
+                              fetch("/api/train", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "pulse" }),
+                              }),
+                            "Pulse complete — review the new draft updates below.",
+                          )
+                        }
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[rgba(var(--accent-rgb),0.35)] py-2 text-xs font-semibold hover:bg-white/5 disabled:opacity-40"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
+                        {data?.webSearch ? "Run Pulse now" : "Add TAVILY_API_KEY to enable"}
+                      </button>
+                    </div>
+
                     <div className="space-y-3 rounded-xl border border-white/10 p-3">
                       <div className="flex flex-wrap gap-2">
                         {SCOPES.map((s) => (
@@ -381,8 +423,33 @@ export default function TrainingPanel({
                               <p className="text-[11px] text-white/45">
                                 {d.scope === "both" ? "Both" : d.scope === "ld" ? "L&D" : "Grievance"} · {d.chunks} chunks ·{" "}
                                 {d.uploadedBy}
+                                {d.source === "web" && !d.needsReview && " · web-sourced"}
                               </p>
+                              {d.needsReview && (
+                                <p className="mt-0.5 text-[11px] text-amber-200">Web-sourced · needs your review before GO LIVE</p>
+                              )}
                             </div>
+                            {d.needsReview && (
+                              <button
+                                onClick={() =>
+                                  confirm(
+                                    `Approve “${d.title}”? Your name will be shown to employees as the reviewer. Open the linked sources to verify before approving.`,
+                                  ) &&
+                                  call(
+                                    () =>
+                                      fetch("/api/train", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ action: "approve", id: d.id }),
+                                      }),
+                                    "Approved.",
+                                  )
+                                }
+                                className="rounded-lg border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-400/10"
+                              >
+                                Approve
+                              </button>
+                            )}
                             <button
                               onClick={() =>
                                 confirm(`Remove “${d.title}” from the draft?`) &&
@@ -468,6 +535,7 @@ export default function TrainingPanel({
                         ok={Boolean(data.settings.icEmail || data.settings.icPhone || data.settings.grievanceChannelUrl)}
                         text="IC / official grievance contact configured"
                       />
+                      <Check ok={!data.docs.some((d) => d.needsReview)} text="Web-sourced updates reviewed" />
                       <Check ok={data.status.testedSinceChange} text="Tested since the last change" />
                       <Check ok={data.storePersistent} text="Persistent storage connected" />
                     </ul>

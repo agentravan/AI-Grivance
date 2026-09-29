@@ -17,8 +17,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authConfigured, clientKey, getAdmin } from "@/lib/auth";
 import { store } from "@/lib/store";
+import { lastPulse, runPulse } from "@/lib/pulse";
+import { webSearchEnabled } from "@/lib/search";
 import {
   addDraftDoc,
+  approveDraftDoc,
   deleteDraftDoc,
   draftStatus,
   getDraftSettings,
@@ -74,13 +77,23 @@ export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (!auth.ok) return auth.res;
   const { admin } = auth;
-  const [docs, settings, status, audit] = await Promise.all([
+  const [docs, settings, status, audit, pulse] = await Promise.all([
     listDraftDocs(),
     getDraftSettings(),
     draftStatus(),
     listAudit(30),
+    lastPulse(),
   ]);
-  return json({ admin: admin.name, docs, settings, status, audit, storePersistent: store.kind === "upstash" });
+  return json({
+    admin: admin.name,
+    docs,
+    settings,
+    status,
+    audit,
+    pulse,
+    webSearch: webSearchEnabled(),
+    storePersistent: store.kind === "upstash",
+  });
 }
 
 // ───────────────────────────────── POST ─────────────────────────────────
@@ -129,6 +142,7 @@ export async function POST(req: NextRequest) {
     // ── JSON actions ──
     const body = (await req.json()) as {
       action?: string;
+      id?: string;
       title?: string;
       scope?: string;
       text?: string;
@@ -147,6 +161,16 @@ export async function POST(req: NextRequest) {
         by: admin.name,
       });
       return json({ ok: true, doc });
+    }
+
+    if (body.action === "pulse") {
+      const run = await runPulse(admin.name);
+      return run.ok ? json({ ok: true, pulse: run }) : json({ error: run.detail, pulse: run }, 502);
+    }
+
+    if (body.action === "approve" && body.id) {
+      const doc = await approveDraftDoc(String(body.id), admin.name);
+      return doc ? json({ ok: true, doc }) : json({ error: "Document not found." }, 404);
     }
 
     if (body.action === "settings" && body.settings && typeof body.settings === "object") {
@@ -176,6 +200,10 @@ export async function PUT(req: NextRequest) {
   if (!docs.length) problems.push("Upload at least one policy or catalog document.");
   if (!settings.icEmail && !settings.icPhone && !settings.grievanceChannelUrl) {
     problems.push("Add Internal Committee / official grievance contact details in Settings.");
+  }
+  const unreviewed = docs.filter((d) => d.needsReview);
+  if (unreviewed.length) {
+    problems.push(`Approve or delete web-sourced updates first: ${unreviewed.map((d) => d.title).join(", ")}.`);
   }
   if (!status.testedSinceChange && !body.force) {
     problems.push("Run at least one Test Mode conversation against the current draft.");
