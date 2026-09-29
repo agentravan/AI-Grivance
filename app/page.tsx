@@ -144,6 +144,9 @@ export default function Dashboard() {
   const settings = status?.settings;
   const name = settings?.assistantName || "AEGIS";
   const isHR = module === "hr";
+  // Grievance voice can be switched off per client in Training Panel → Settings.
+  const grievanceVoiceOff = settings?.grievanceVoice === "off";
+  const voiceLocked = isHR && grievanceVoiceOff;
 
   // ── voice agent ──
   const onUserUtterance = useCallback((text: string) => sendRef.current(text, true), []);
@@ -179,11 +182,11 @@ export default function Dashboard() {
   useEffect(() => local.set("aegis.path", path), [path]);
   useEffect(() => local.set("aegis.lang", lang), [lang]);
 
-  // Voice is disabled in grievance mode — end any call when switching.
+  // If grievance voice is switched off, end any call when entering that module.
   useEffect(() => {
-    if (isHR && voice.callActive) voice.endCall();
+    if (voiceLocked && voice.callActive) voice.endCall();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHR]);
+  }, [voiceLocked]);
 
   // Auto-scroll the conversation.
   useEffect(() => {
@@ -208,7 +211,7 @@ export default function Dashboard() {
       const patch = (p: Partial<Msg>) =>
         setThreads((t) => ({ ...t, [mod]: t[mod].map((m) => (m.id === asstId ? { ...m, ...p } : m)) }));
 
-      const speakIt = mod === "ld" && (viaVoice || voice.callActive);
+      const speakIt = !(mod === "hr" && grievanceVoiceOff) && (viaVoice || voice.callActive);
       if (speakIt) voice.beginResponse();
 
       abortRef.current = new AbortController();
@@ -267,7 +270,7 @@ export default function Dashboard() {
         if (speakIt) voice.endResponse();
       }
     },
-    [testMode, voice],
+    [testMode, voice, grievanceVoiceOff],
   );
   sendRef.current = send;
 
@@ -278,7 +281,7 @@ export default function Dashboard() {
 
   // ── core button behaviour ──
   const onCorePress = () => {
-    if (isHR) return;
+    if (voiceLocked) return;
     if (!voice.supported.stt) {
       voice.clearError();
       alert("Voice input needs Chrome, Edge or Safari. You can still type below.");
@@ -395,7 +398,14 @@ export default function Dashboard() {
                     <ul className="space-y-2.5 text-[13px] leading-relaxed text-white/75">
                       <Li icon={EyeOff}>Nothing you type is saved. Closing this tab erases the conversation.</Li>
                       <Li icon={Scale}>This is a guide, not a filing. Formal complaints go through the official channel below.</Li>
-                      <Li icon={VolumeX}>Voice is switched off here so nothing is read aloud or sent to a speech service.</Li>
+                      {grievanceVoiceOff ? (
+                        <Li icon={VolumeX}>Voice is switched off here so nothing is read aloud or sent to a speech service.</Li>
+                      ) : (
+                        <Li icon={VolumeX}>
+                          Voice works here too. Your browser's speech service processes the audio, so avoid names and personal
+                          details, and use headphones in shared spaces.
+                        </Li>
+                      )}
                       <Li icon={ShieldCheck}>Emails, phone numbers and ID numbers are removed before any AI processing.</Li>
                     </ul>
                   </Panel>
@@ -535,33 +545,36 @@ export default function Dashboard() {
           {/* Holographic core */}
           <section className="order-1 flex flex-col items-center justify-center gap-4 lg:order-2">
             <HoloCore
-              state={isHR ? "idle" : voice.state}
+              state={voiceLocked ? "idle" : voice.state}
               getLevel={voice.getLevel}
               onPress={onCorePress}
               callActive={voice.callActive}
-              locked={isHR}
+              locked={voiceLocked}
               size={coreSize}
             />
 
             <div className="text-center">
               <motion.p
-                key={isHR ? "hr" : voice.state}
+                key={voiceLocked ? "hr" : voice.state}
                 initial={{ opacity: 0, letterSpacing: "0.8em" }}
                 animate={{ opacity: 1, letterSpacing: "0.4em" }}
                 className="font-display text-sm font-bold accent glow-text"
               >
-                {isHR ? "PRIVATE · TEXT ONLY" : STATE_LABEL[voice.state]}
+                {voiceLocked ? "PRIVATE · TEXT ONLY" : STATE_LABEL[voice.state]}
               </motion.p>
               <p className="mt-2 min-h-[1.5rem] max-w-sm text-sm italic text-white/70">
-                {isHR
+                {voiceLocked
                   ? "Type below. Voice is off here to protect your privacy."
                   : voice.interim ||
+                    (isHR && !voice.callActive && voice.supported.stt
+                      ? "Tap the core to talk — please avoid names and personal details"
+                      : "") ||
                     (voice.callActive ? "Go ahead, I'm listening…" : voice.supported.stt || !voice.supported.checked ? "Tap the core to talk" : "Voice needs Chrome, Edge or Safari — type below")}
               </p>
               {voice.error && <p className="mt-1 text-xs text-rose-300">{voice.error}</p>}
             </div>
 
-            {!isHR && (
+            {!voiceLocked && (
               <div className="flex items-center gap-2">
                 <label className="glass flex items-center gap-2 !rounded-xl px-3 py-1.5 text-xs">
                   <Languages className="h-3.5 w-3.5 accent" />

@@ -507,6 +507,21 @@ export default function TrainingPanel({
                       </label>
                     ))}
                     <button
+                      type="button"
+                      onClick={() => setForm({ ...form, grievanceVoice: form.grievanceVoice === "off" ? "on" : "off" })}
+                      className="flex w-full items-center justify-between rounded-xl border border-white/10 px-4 py-3 text-left text-sm hover:bg-white/5"
+                    >
+                      <span>
+                        <b>Voice in Grievance module</b>
+                        <span className="block text-[11px] text-white/45">
+                          Off = text only (most private). On = employees can talk, audio goes to the browser's speech service.
+                        </span>
+                      </span>
+                      <span className={`font-mono text-xs ${form.grievanceVoice === "off" ? "text-white/50" : "text-emerald-300"}`}>
+                        {form.grievanceVoice === "off" ? "OFF" : "ON"}
+                      </span>
+                    </button>
+                    <button
                       disabled={busy}
                       onClick={() =>
                         call(

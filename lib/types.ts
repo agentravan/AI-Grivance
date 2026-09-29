@@ -33,6 +33,8 @@ export interface OrgSettings {
   hrEmail: string;
   /** Free booking link for coaching sessions (Cal.com, Google Calendar appointment page…). */
   coachingBookingUrl: string;
+  /** "on" = voice calls allowed in the Grievance module too; "off" = text only. */
+  grievanceVoice: string;
 }
 
 export const DEFAULT_SETTINGS: OrgSettings = {
@@ -44,6 +46,7 @@ export const DEFAULT_SETTINGS: OrgSettings = {
   grievanceChannelUrl: "",
   hrEmail: "",
   coachingBookingUrl: "",
+  grievanceVoice: "on",
 };
 
 export interface PublicStatus {
